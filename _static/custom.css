@@ -1,0 +1,22 @@
+.slides > article.level-1 > h1 {
+    color: #222;
+    font-size: 2.5em;
+    background: rgba(255, 255, 255, 0.7);
+
+    line-height: 1.5em;
+    margin-top: 55%;
+    padding-left: 10px;
+}
+
+
+.slides > article.level-1 .caption {
+    color: white;
+    background: rgba(255, 255, 255, 0.25);
+    padding: 0 5px;
+    border-bottom-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+.strike {
+  text-decoration: line-through;
+}
