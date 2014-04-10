@@ -321,7 +321,7 @@ Switching Locales
 * So we switch locales mid-stream for event emails, etc
 
 Switch-And-Restore
-==================
+------------------
 
 * This means another place call to ``activate``
 
