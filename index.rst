@@ -19,21 +19,14 @@
    .. figure:: /_static/after.png
       :class: fill
 
-Agenda
-======
-
-* What changed?
-* Key decision points
-* Localizing Eventbrite
-* Lessons learned / time machine dreams
-
 Aside: Locale vs Language
 =========================
 
 * Locales, not Languages
 * Date & number formatting
-* Dialects
-* ``fr-CA`` and ``fr-FR`` are locales
+* Local dialects
+* ``en`` and ``fr`` are languages
+* ``en-US``, ``fr-CA``, and ``fr-FR`` are locales
 
 What We Did
 ===========
@@ -47,13 +40,11 @@ What We Did
 * Served on local TLDs
 * High degree of organizer control
 
-Key Decisions
-=============
+.. note::
 
-* What locale do anonymous users use?
-* How do locales and TLDs interact
-* How does authentication work
-* What is the canonical URL for a page?
+   There are several key decisions we had to make as we started this
+   process. The first of them was how locales and TLDs interact.
+
 
 Locales & TLDs
 ==============
@@ -64,10 +55,10 @@ Locales & TLDs
 * What's the default on a TLD?
 
   * Content negotiation
-  * "Best guess"
+  * TLD/rule based
 
-Locales & TLDs
-==============
+Locales & TLDs at Eventbrite
+============================
 
 .. rst-class:: build
 
@@ -101,12 +92,13 @@ Default Locales
 
 * Custom middleware handles determining locale
 
+  * Cookie
   * Geo IP
   * HTTP-Language-Accept
   * TLD
 
 * Scribbles on ``request``
-* Remember middleware is long-lived!
+* Middleware is long-lived!
 
 Setting the Locale
 ==================
@@ -121,17 +113,11 @@ Last thing middleware does is activate the locale.
 
        def process_request(self, request):
 
-           locale = ... # black magic
+           locale = ... # Eventbrite rules: cookie, geoip, etc.
 
            translation.activate(locale)
 
 This loads the translations from disk or cache.
-
-Links Don't Break
-=================
-
-* Locale-enabled views redirect if needed
-* Critically important for user-controlled content
 
 Marking Translations
 ====================
@@ -140,36 +126,78 @@ The ``_`` function traditionally marks translations.
 
 .. code-block:: python
 
-   from i18n.translation import ugettext as _
+   from django.utils.translation import ugettext as _
 
    _("Hello, world")
 
-.. nextslide:: Marking Translations (Mako)
+.. code-block:: python
+
+   _("Hello, %(name)s") % ("Nathan",)
+
+
+Marking Translations (Mako)
+---------------------------
 
 .. code-block:: none
 
    ${ _('Hello, world') }
 
-.. nextslide:: Marking Translations (Javascript)
+.. code-block:: none
+
+   ${ _("Hello, %(name)s") % ("Nathan",) }
+
+
+Marking Translations (Django templates)
+---------------------------------------
+
+.. code-block:: none
+
+   {% trans "Hello, world" %}
+
+.. code-block:: none
+
+   {% blocktrans %}Hello, {{ name }}.{% endblocktrans %}
+
+
+Marking Translations (Javascript)
+---------------------------------
+
+Django's `Javascript catalog`_ provides a ``gettext`` and
+``interpolate`` function.
+
+.. _`Javascript catalog`: https://docs.djangoproject.com/en/1.6/topics/i18n/translation/#using-the-javascript-translation-catalog
 
 .. code-block:: javascript
 
    window.gettext('Hello, world')
 
-.. nextslide:: Marking Translation (Handlebars)
+.. code-block:: javascript
+
+   window.interpolate(
+        window.gettext('Hello, %s'), ['Nathan']
+     );
+
+``gettext`` is easily extendable to take an object, simplifying the
+syntax.
+
+.. code-block:: javascript
+
+    window.gettext('Hello, %(name)s', {
+        name: 'Nathan'
+    });
+
+
+Marking Translation (Handlebars)
+--------------------------------
 
 .. code-block:: none
 
    {{_ "Hello, world" }}
 
-.. code-block:: javascript
+.. code-block:: none
 
-    Handlebars.registerHelper('_',
-        function(text, options){
+   {{_ 'Hello, %(name)s' name='Nathan' }}
 
-          // ...
-        }
-    );
 
 Extracting Translations
 =======================
@@ -221,9 +249,72 @@ pybabel
                 comments)`` tuples, funcname and comments do not apply
                 for the handlebars extraction """
 
+Using Translations
+==================
 
-Event Pages
-===========
+* Django expects everything will be in the ``django`` or ``djangojs``
+  domain
+* Translations are stored in files with a specific path format:
+
+  ``<locale>/LC_MESSAGES/django.po``
+
+Where to Store Translations
+---------------------------
+
+* Django looks for these paths in:
+
+  * A ``locale`` directory in each application
+  * A list of paths specified in ``settings.LOCALE_PATHS``
+  * A ``django/conf/locale/`` directory on ``sys.path``
+
+Compiling Translations
+----------------------
+
+* You'll want to compile to binary ``.mo`` files
+
+::
+
+  $ pybabel compile -D django -d django/conf/locale/ -f
+
+::
+
+  $ django-admin.py compilemessages --locale=pt_BR
+
+
+Localization
+============
+
+* Context processor to make helper funcs available
+* Babel ships with full library of formatting data
+
+* ``format_date``
+* ``format_number``
+* ``format_currency``
+
+Bytes v. Strings
+----------------
+
+* Legacy code expects UTF-8 bytes
+* Django returns Unicode objects
+* This complicates helpers
+* ``EncodedString`` smooths over these bumps
+
+``EncodedString``
+-----------------
+
+.. code-block:: python
+
+   EncodedString.new(
+       format_date(event.start_date),
+   )
+
+* Stores encoding with the data, defaulting to UTF-8
+* Subclasses ``str`` to avoid implicit up-cast when ``join``\ ing
+* Overrides ``decode`` to use stored encoding
+* https://gist.github.com/nyergler/10394248
+
+Switching Locales
+=================
 
 * Events have a configurable locale
 * Used for all event-related communication
@@ -237,7 +328,7 @@ Switch-And-Restore
 .. code-block:: python
 
    from functools import wraps
-   from common.utils.i18n import set_language, get_language
+   from django.utils.translation import get_language
 
    def preserve_request_locale(f):
        """Preserves the request locale across a function.
@@ -254,25 +345,18 @@ Switch-And-Restore
 
        return wraps(f)(wrapper)
 
-
-Issues
-======
-
-* Subtle bugs with switching domains (SSO)
-* Need to be careful with changing locales midstream
-* Retrofitting best practices is hard (ie, concatenation)
-
 Lessons Learned
 ===============
 
-* Do you really need other TLDs?
+* Multi-TLD support adds a lot of complexity
 * Translators don't get the visual context
-* Start early
+* Need to be careful with changing locales midstream
+* Retrofitting best practices is hard (ie, concatenation)
 
 Thanks!
 =======
 
-* http://github.com/nyergler/speaking-tongues
+* http://github.com/nyergler/speaking-in-tongues
 * nathan@eventbrite.com
 * `@nyergler`_
 
